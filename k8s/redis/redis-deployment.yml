@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "redis-deployment"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "redis"
+  template:
+    metadata:
+      labels:
+        app: "redis"
+    spec:
+      serviceAccount: redis-user
+      containers:
+      - name: redis
+        image: "docker.io/redis:6.0.5"
+        volumeMounts:
+          - name: redis-data
+            mountPath: /data
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 150m
+            memory: 512Mi
+        ports:
+        - containerPort: 6379
+      volumes:
+        - name: redis-data
+          gcePersistentDisk:
+            pdName: redis-disk
+            fsType: ext4
+
+
