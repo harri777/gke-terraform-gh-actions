@@ -1,0 +1,35 @@
+
+name: Deploy ISTIO
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths:
+      - 'k8s/istio/**'
+  
+env:
+  GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+
+jobs:
+  ISTIO:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      # Setup gcloud CLI
+      - uses: google-github-actions/setup-gcloud@master
+        with:
+          service_account_key: ${{ secrets.GKE_SA_KEY }}
+          project_id: ${{ secrets.GKE_PROJECT }}
+
+      # Get the GKE credentials so we can deploy to the cluster
+      - run: |-
+          gcloud container clusters get-credentials "$GKE_CLUSTER_NAME" --zone "$GKE_ZONE"
+
+      - name: Deploy ISTIO
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/istio/istio-gateway-deployment.yml

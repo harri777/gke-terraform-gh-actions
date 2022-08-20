@@ -1,0 +1,93 @@
+
+name: Deploy API
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+  
+env:
+  GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+  AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+
+jobs:
+  Tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build docker images
+        run: docker-compose up --build -d
+
+      - name: Run tests
+        run: docker-compose exec -T web pipenv run pytest -s -x tests
+
+  Build:
+    runs-on: ubuntu-latest
+    needs: [Tests]
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Docker Login
+        uses: docker/login-action@v1.10.0
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PWD }}
+      - name: Build and push Docker images
+        uses: docker/build-push-action@v2.6.1
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USER }}/sre:latest
+            ${{ secrets.DOCKER_USER }}/sre:${{ github.run_number }}
+
+  Deploy-api:
+    runs-on: ubuntu-latest
+    needs: [Build]
+    steps:
+      - uses: actions/checkout@v2
+      
+      # Setup gcloud CLI
+      - uses: google-github-actions/setup-gcloud@master
+        with:
+          service_account_key: ${{ secrets.GKE_SA_KEY }}
+          project_id: ${{ secrets.GKE_PROJECT }}
+
+      # Get the GKE credentials so we can deploy to the cluster
+      - run: |-
+          gcloud container clusters get-credentials "$GKE_CLUSTER_NAME" --zone "$GKE_ZONE"
+
+      - name: API service account
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/api/api-service-account.yml
+
+      # Inject var in deployment
+      - name: Render Deployment YAML - API
+        uses: nowactions/envsubst@v1
+        with:
+          input:  k8s/api/api-deployment.yml
+          output: k8s/api/deployment.yml
+        env:
+          IMAGE_TAG: ${{ secrets.DOCKER_USER }}/sre:${{ github.run_number }}
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+
+      - name: Deploy
+        run: kubectl apply -f ./k8s/api/deployment.yml
+            
+      - name: API service
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/api/api-service.yml
+
+      - name: API horizontal pod autoscaler
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/api/api-hpa.yml

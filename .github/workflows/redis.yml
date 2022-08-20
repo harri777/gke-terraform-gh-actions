@@ -1,0 +1,59 @@
+
+name: Deploy Redis
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths:
+      - 'k8s/redis/**'
+  
+env:
+  GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+
+jobs:
+  Deploy-redis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      # Setup gcloud CLI
+      - uses: google-github-actions/setup-gcloud@master
+        with:
+          service_account_key: ${{ secrets.GKE_SA_KEY }}
+          project_id: ${{ secrets.GKE_PROJECT }}
+
+      # Get the GKE credentials so we can deploy to the cluster
+      - run: |-
+          gcloud container clusters get-credentials "$GKE_CLUSTER_NAME" --zone "$GKE_ZONE"
+
+      - name: Redis service account
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/redis/redis-service-account.yml
+
+      - name: Redis deployment
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/redis/redis-deployment.yml
+      
+      - name: Redis service
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/redis/redis-service.yml
+
+      - name: Redis network policy
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/redis/redis-network-policy.yml
+
+      - name: Redis horizontal pod autoscaler
+        uses: Azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/redis/redis-hpa.yml

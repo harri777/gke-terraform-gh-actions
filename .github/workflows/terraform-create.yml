@@ -1,0 +1,94 @@
+name: 'Terraform - apply'
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - 'terraform/**'
+
+env:
+  GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+
+jobs:
+  enable-api:
+    runs-on: ubuntu-latest
+    name: 'Enable APIs gcloud'
+    steps:
+      - uses: actions/checkout@v2
+      
+      # Setup gcloud CLI
+      - uses: google-github-actions/setup-gcloud@master
+        with:
+          service_account_key: ${{ secrets.GKE_SA_KEY }}
+          project_id: ${{ secrets.GKE_PROJECT }}
+
+      - name: Enable storage
+        run: gcloud services enable compute.googleapis.com --project ${{ secrets.GKE_PROJECT }}
+
+      - name: Enable kubernetes engine
+        run: gcloud services enable container.googleapis.com --project ${{ secrets.GKE_PROJECT }}
+
+  terraform:
+    needs: [enable-api]
+    name: 'Terraform - Create cluster'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./terraform
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+          
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color
+        continue-on-error: true
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+  istio-config:
+    name: 'Istio deployment'
+    runs-on: ubuntu-latest
+    needs: [terraform]
+
+    defaults:
+      run:
+        working-directory: ./terraform
+        shell: bash
+
+    steps:
+      - name: Setup GCP
+        uses: actions/checkout@v2
+
+      - uses: google-github-actions/setup-gcloud@master
+        with:
+          service_account_key: ${{ secrets.GKE_SA_KEY }}
+          project_id: ${{ secrets.GKE_PROJECT }}
+
+      - run: |-
+          gcloud container clusters get-credentials "$GKE_CLUSTER_NAME" --zone "$GKE_ZONE"
+
+
+      - name: Inject istio
+        id: inject
+        run: kubectl label namespace default istio-injection=enabled --overwrite
