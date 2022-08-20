@@ -1,0 +1,11 @@
+.env
+
+/terraform/credentials.*
+**/.terraform/*
+
+# .tfstate files
+/terraform/*.tfstate
+/terraform/*.tfstate.*
+
+
+*.DS_STORE
