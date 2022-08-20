@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "api-deployment"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: "api"
+  template:
+    metadata:
+      labels:
+        app: "api"
+    spec:
+      serviceAccount: api-user
+      containers:
+        - name: "api-container"
+          image: "harrissonbiaggio94/sre"
+          ports:
+            - containerPort: 8000
+          env:
+            - name: REDIS_HOST
+              value: redis-service
+            - name: AUTH_TOKEN
+              value: "${AUTH_TOKEN}"
+          livenessProbe:
+            httpGet:
+              port: 8000
+              path: /healthcheck
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 4
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 512Mi
