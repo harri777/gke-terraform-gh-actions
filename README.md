@@ -46,7 +46,7 @@ Terraform Cloud is being used for versioning the `tfstate`.
 
 - `TF_VAR_project`       -> project id GCP
 - `TF_VAR_google_sa_key` -> service account key .json (Donwload made in the GCP step, open the file, copy and paste the content)
-  - PS: If you have trouble adding ess secret in terraform cloud, as it is JSON, use the command `tr -d '\n' < arquivo.json` to convert from multi line to single line.
+  - PS: If you have trouble adding ess secret in terraform cloud, as it is JSON, use the command `tr -d '\n' < file.json` to convert from multi line to single line.
   - Mark as sensitive.
 - `TF_VAR_cluster_name`  -> Name you want for your cluster (this name will also be used in GH Actions)(*)
 
